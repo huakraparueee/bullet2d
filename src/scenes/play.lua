@@ -28,6 +28,9 @@ local scenes = {
 
 local wired = false
 
+local WAVE_CLEAR_DELAY = 0.75
+local SPAWN_INTERVAL = 0.08
+
 local function walk_npc_to(id, px, py)
     if not px or Iso.is_npc_anim_busy(id) then
         return false
@@ -87,6 +90,7 @@ function M:load_level(s)
         dialogs = s.dialogs,
         phase = 0,
         started = false,
+        wave_state = "idle",
     }
 
     Combat.reset(self.map, self.carry_player)
@@ -95,7 +99,7 @@ function M:load_level(s)
     AI.register(self.map, s.ai.wander_ids)
 end
 
-function M:start_wave(phase)
+function M:begin_wave_spawn(phase)
     local map = self.map
     local data = self.level_data
 
@@ -103,15 +107,80 @@ function M:start_wave(phase)
         return
     end
 
+    Iso.clear_projectiles()
+
+    for _, id in ipairs(Maps.enemy_slot_ids()) do
+        Iso.run({
+            type = "npc.retire",
+            id = id,
+        })
+    end
+
     Combat.clear_enemies(map)
 
     local enemies = Maps.phase_enemies(phase, data.combat)
 
-    Combat.start_wave(map, enemies)
-    Iso.run_many(Maps.enemy_spawn_events(enemies))
+    Combat.start_wave(map, enemies, phase)
+
+    self.spawn_queue = Maps.enemy_spawn_events(enemies)
+    self.spawn_i = 1
+    self.spawn_timer = 0
 
     map.phase = phase
-    map.started = true
+    map.wave_state = "spawning"
+    map.started = false
+end
+
+function M:queue_next_wave(phase)
+    local map = self.map
+
+    if not map then
+        return
+    end
+
+    map.next_phase = phase
+    map.wave_state = "between"
+    map.wave_clear_timer = WAVE_CLEAR_DELAY
+    map.started = false
+end
+
+local function tick_wave(self, dt)
+    local map = self.map
+
+    if not map then
+        return
+    end
+
+    if map.wave_state == "between" then
+        map.wave_clear_timer = map.wave_clear_timer - dt
+
+        if map.wave_clear_timer <= 0 then
+            self:begin_wave_spawn(map.next_phase)
+        end
+
+        return
+    end
+
+    if map.wave_state ~= "spawning" then
+        return
+    end
+
+    local queue = self.spawn_queue
+
+    if not queue or self.spawn_i > #queue then
+        map.wave_state = "playing"
+        map.started = true
+        self.spawn_queue = nil
+        return
+    end
+
+    self.spawn_timer = self.spawn_timer - dt
+
+    while self.spawn_timer <= 0 and self.spawn_i <= #queue do
+        Iso.run(queue[self.spawn_i])
+        self.spawn_i = self.spawn_i + 1
+        self.spawn_timer = SPAWN_INTERVAL
+    end
 end
 
 function M.start(flow_key)
@@ -178,15 +247,24 @@ function M:enter(_, opts)
             find_piece = function(id)
                 return Iso.find_by_id(id)
             end,
-            shoot = function(npc_id, to_px, to_py)
+            projectile_count = function()
+                return Iso.projectile_count()
+            end,
+            each_projectile = function(fn)
+                Iso.each_projectile(fn)
+            end,
+            spawn_projectile = function(owner_id, to_px, to_py, meta)
+                local arrow = config.PROJECTILES.arrow
+
                 Iso.run({
-                    type = "npc.shoot",
-                    id = npc_id,
+                    type = "projectile.spawn",
                     kind = "arrow",
-                    move = "arc",
-                    duration = 0.4,
-                    to_px = to_px,
-                    to_py = to_py,
+                    from = { npc_id = owner_id },
+                    to = { px = to_px, py = to_py },
+                    move = arrow.move,
+                    duration = arrow.duration,
+                    arc_height = arrow.arc_height,
+                    meta = meta,
                 })
             end,
             walk_to_pos = function(id, px, py)
@@ -195,9 +273,9 @@ function M:enter(_, opts)
             npc_busy = function(npc_id)
                 return Iso.is_npc_anim_busy(npc_id)
             end,
-            remove_npc = function(id)
+            retire_npc = function(id)
                 Iso.run({
-                    type = "npc.remove",
+                    type = "npc.retire",
                     id = id,
                 })
             end,
@@ -334,7 +412,7 @@ function M:enter(_, opts)
         end)
 
         Flow.add("start_wave", function(block, done)
-            M:start_wave(block.phase or 1)
+            M:begin_wave_spawn(block.phase or 1)
             done()
         end)
     end
@@ -356,19 +434,26 @@ function M:enter(_, opts)
     end
 end
 
-local function sync_input(map)
-    local blocked = Combat.is_upgrade_pending(map) or Combat.is_dead(map)
-
-    Unit.set_input_enabled(map, not blocked)
+local function gameplay_paused(map)
+    return Combat.is_upgrade_pending(map)
+        or Combat.is_dead(map)
+        or map.wave_state ~= "playing"
 end
 
-local function advance_phase(map)
-    M.carry_player = Combat.player_stats(map)
-    M:start_wave(map.phase + 1)
+local function sync_input(map)
+    Unit.set_input_enabled(map, not gameplay_paused(map))
+end
+
+local function sync_sim(map)
+    local paused = gameplay_paused(map)
+
+    Iso.set_npc_paused(paused)
+    Iso.set_structure_paused(paused)
+    Iso.set_projectile_paused(paused)
 end
 
 local function tick_combat(map, dt)
-    if not map.started then
+    if map.wave_state ~= "playing" or not map.started then
         return
     end
 
@@ -379,8 +464,12 @@ local function tick_combat(map, dt)
     Combat.apply_player_speed(map)
     Combat.update(map, dt, true)
 
-    if Combat.enemy_count(map) == 0 and not Combat.is_upgrade_pending(map) then
-        advance_phase(map)
+    if Combat.enemy_count(map) == 0
+        and not Combat.is_upgrade_pending(map)
+        and map.wave_state == "playing"
+    then
+        M.carry_player = Combat.player_stats(map)
+        M:queue_next_wave(map.phase + 1)
     end
 end
 
@@ -394,8 +483,10 @@ function M:update(dt)
         return
     end
 
-    Iso.tick(dt)
     sync_input(map)
+    sync_sim(map)
+    Iso.tick(dt)
+    tick_wave(self, dt)
     Unit.update(map, dt)
     AI.update(map, dt)
     tick_combat(map, dt)
@@ -427,7 +518,7 @@ function M:keypressed(key, _, isrepeat)
             M.carry_player = Combat.player_stats(map)
             Combat.reset(map, M.carry_player)
             Unit.spawn(map, { npc_id = Combat.player_id() })
-            M:start_wave(map.phase)
+            M:begin_wave_spawn(map.phase)
         else
             gamestate.switch(M, {
                 boot = true,

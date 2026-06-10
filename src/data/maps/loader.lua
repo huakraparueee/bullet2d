@@ -1,6 +1,7 @@
 local M = {}
 
 local MAP_ID = "level1"
+local MAX_ENEMIES_PER_PHASE = 20
 
 local cache = {}
 
@@ -33,14 +34,17 @@ end
 function M.phase_enemies(phase, combat)
     local out = {}
     local templates = combat.enemies or {}
-    local count = #templates + math.floor((phase - 1) / 2)
+    local count = math.min(
+        #templates + math.floor((phase - 1) / 2),
+        MAX_ENEMIES_PER_PHASE
+    )
 
     for i = 1, count do
         local tpl = templates[((i - 1) % #templates) + 1]
         local scaled = M.scale_enemy(phase, tpl)
 
         out[#out + 1] = {
-            id = tpl.id .. "_p" .. phase .. "_" .. i,
+            id = "slime_" .. i,
             kind = tpl.kind,
             attack = tpl.attack or "melee",
             tile_x = tpl.tile_x,
@@ -85,7 +89,7 @@ function M.enemy_spawn_events(enemies)
 
     for _, e in ipairs(enemies) do
         evs[#evs + 1] = {
-            type = "npc.add",
+            type = "npc.place",
             id = e.id,
             kind = e.kind,
             tile_x = e.tile_x,
@@ -96,6 +100,17 @@ function M.enemy_spawn_events(enemies)
     end
 
     return evs
+end
+
+function M.enemy_slot_ids(max)
+    max = max or MAX_ENEMIES_PER_PHASE
+    local ids = {}
+
+    for i = 1, max do
+        ids[i] = "slime_" .. i
+    end
+
+    return ids
 end
 
 function M.load(id)

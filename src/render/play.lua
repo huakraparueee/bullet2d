@@ -68,7 +68,12 @@ function M.draw_hud(view)
 
     lg.setColor(0.92, 0.92, 0.96, 0.9)
     lg.print(
-        string.format("Phase %d  Enemies: %d", view.phase or 1, view.enemy_count or 0),
+        string.format(
+            "Phase %d  Enemies: %d  Shots: %d",
+            view.phase or 1,
+            view.enemy_count or 0,
+            p.shot_count or 1
+        ),
         margin,
         xp_y + bar_h + 8
     )

@@ -10,7 +10,7 @@ local hooks
 local PLAYER_ID = "pop"
 
 local BASE = {
-    max_hp = 120,
+    max_hp = 100,
     damage = 12,
     fire_rate = 0.45,
     move_speed = 2,
@@ -28,9 +28,11 @@ local HIT_RADIUS = 1.2
 local MELEE_RANGE = 1.0
 local SHOOT_RANGE = 7
 local CHASE_RANGE = 12
-local CHASE_REPATH = 0.8
-local SHOT_DURATION = 0.4
+local CHASE_REPATH = 1.5
 local HIT_INVULN = 0.55
+local MAX_ACTIVE_SHOTS = 100
+local HIT_RADIUS_SQ = HIT_RADIUS * HIT_RADIUS
+local PHASES_PER_SHOT = 5
 
 function Combat.init(h)
     hooks = h
@@ -48,7 +50,14 @@ local function default_player()
         xp_to_next = BASE.xp_to_level,
         shoot_cd = 0,
         hit_invuln = 0,
+        shot_count = 1,
     }
+end
+
+local function shot_count_for_phase(phase)
+    phase = phase or 1
+
+    return 1 + math.floor(phase / PHASES_PER_SHOT)
 end
 
 local function copy_player(src)
@@ -72,8 +81,8 @@ local function copy_player(src)
     return p
 end
 
-local function register_enemy(enemies, def)
-    enemies[def.id] = {
+local function register_enemy(c, def)
+    c.enemies[def.id] = {
         hp = def.hp,
         max_hp = def.hp,
         damage = def.damage,
@@ -83,13 +92,26 @@ local function register_enemy(enemies, def)
         attack = def.attack or "melee",
         attack_cd = love.math.random() * def.fire_rate,
     }
+    c.enemy_ids[#c.enemy_ids + 1] = def.id
+end
+
+local function remove_enemy_entry(c, id)
+    c.enemies[id] = nil
+
+    for i, eid in ipairs(c.enemy_ids) do
+        if eid == id then
+            c.enemy_ids[i] = c.enemy_ids[#c.enemy_ids]
+            c.enemy_ids[#c.enemy_ids] = nil
+            return
+        end
+    end
 end
 
 function Combat.reset(world, carry_player)
     world.combat = {
         player = copy_player(carry_player),
         enemies = {},
-        shots = {},
+        enemy_ids = {},
         upgrade_pending = false,
         dead = false,
     }
@@ -97,18 +119,18 @@ function Combat.reset(world, carry_player)
     Combat.apply_player_speed(world)
 end
 
-function Combat.start_wave(world, enemy_list)
+function Combat.start_wave(world, enemy_list, phase)
     local c = world.combat
 
     if not c then
         return
     end
 
-    c.shots = {}
     c.dead = false
+    c.player.shot_count = shot_count_for_phase(phase)
 
     for _, def in ipairs(enemy_list or {}) do
-        register_enemy(c.enemies, def)
+        register_enemy(c, def)
     end
 end
 
@@ -120,11 +142,11 @@ function Combat.clear_enemies(world)
     end
 
     for id in pairs(c.enemies) do
-        hooks.remove_npc(id)
+        hooks.retire_npc(id)
     end
 
     c.enemies = {}
-    c.shots = {}
+    c.enemy_ids = {}
 end
 
 function Combat.player_stats(world)
@@ -145,8 +167,10 @@ end
 function Combat.enemy_count(world)
     local n = 0
 
-    for _, e in pairs(world.combat.enemies) do
-        if e.hp > 0 then
+    for _, id in ipairs(world.combat.enemy_ids) do
+        local e = world.combat.enemies[id]
+
+        if e and e.hp > 0 then
             n = n + 1
         end
     end
@@ -170,61 +194,76 @@ local function is_player(id)
     return id == PLAYER_ID
 end
 
-local function dist(ax, ay, bx, by)
+local function dist_sq(ax, ay, bx, by)
     local dx = ax - bx
     local dy = ay - by
 
-    return math.sqrt(dx * dx + dy * dy)
+    return dx * dx + dy * dy
 end
 
-local function nearest_enemy(world)
+local function dist(ax, ay, bx, by)
+    return math.sqrt(dist_sq(ax, ay, bx, by))
+end
+
+local function nearest_enemies(world, count)
     local player = hooks.find_piece(PLAYER_ID)
 
-    if not player or player.pos_x == nil then
-        return nil
+    if not player or player.pos_x == nil or count <= 0 then
+        return {}
     end
 
-    local best_id
-    local best_d = math.huge
+    local ranked = {}
 
-    for id, e in pairs(world.combat.enemies) do
-        if e.hp > 0 then
+    for _, id in ipairs(world.combat.enemy_ids) do
+        local e = world.combat.enemies[id]
+
+        if e and e.hp > 0 then
             local piece = hooks.find_piece(id)
 
-            if piece and piece.pos_x ~= nil then
-                local d = dist(player.pos_x, player.pos_y, piece.pos_x, piece.pos_y)
-
-                if d < best_d then
-                    best_d = d
-                    best_id = id
-                end
+            if piece
+                and not piece._pooled
+                and piece.pos_x ~= nil
+            then
+                ranked[#ranked + 1] = {
+                    id = id,
+                    d = dist(player.pos_x, player.pos_y, piece.pos_x, piece.pos_y),
+                }
             end
         end
     end
 
-  return best_id, best_d
+    table.sort(ranked, function(a, b)
+        return a.d < b.d
+    end)
+
+    local out = {}
+
+    for i = 1, math.min(count, #ranked) do
+        out[i] = ranked[i].id
+    end
+
+    return out
 end
 
 local function shoot(world, npc_id, to_px, to_py, damage)
+    if not is_player(npc_id) or not hooks.spawn_projectile then
+        return
+    end
+
+    if hooks.projectile_count() >= MAX_ACTIVE_SHOTS then
+        return
+    end
+
     local piece = hooks.find_piece(npc_id)
 
     if not piece or piece.pos_x == nil then
         return
     end
 
-    world.combat.shots[#world.combat.shots + 1] = {
+    hooks.spawn_projectile(npc_id, to_px, to_py, {
         owner_id = npc_id,
-        from_px = piece.pos_x,
-        from_py = piece.pos_y,
-        to_px = to_px,
-        to_py = to_py,
         damage = damage,
-        duration = SHOT_DURATION,
-        elapsed = 0,
-        hit = false,
-    }
-
-    hooks.shoot(npc_id, to_px, to_py)
+    })
 end
 
 local function try_level_up(world)
@@ -266,6 +305,7 @@ function Combat.apply_upgrade(world, index)
         Combat.apply_player_speed(world)
     end
 
+    p.hp = p.max_hp
     c.upgrade_pending = false
 
     return true
@@ -309,58 +349,70 @@ local function damage_enemy(world, id, amount)
     e.hp = e.hp - amount
 
     if e.hp <= 0 then
-        e.hp = 0
         world.combat.player.xp = world.combat.player.xp + (e.xp or 10)
-        hooks.remove_npc(id)
+        hooks.retire_npc(id)
+        remove_enemy_entry(world.combat, id)
         try_level_up(world)
     end
 end
 
-local function update_shots(world, dt)
+local function update_projectile_hits(world)
     local c = world.combat
+
+    if c.upgrade_pending or not hooks.each_projectile then
+        return
+    end
+
     local player = hooks.find_piece(PLAYER_ID)
-    local i = 1
 
-    while i <= #c.shots do
-        local shot = c.shots[i]
-        shot.elapsed = shot.elapsed + dt
-        local t = math.min(1, shot.elapsed / shot.duration)
-        local px = shot.from_px + (shot.to_px - shot.from_px) * t
-        local py = shot.from_py + (shot.to_py - shot.from_py) * t
+    hooks.each_projectile(function(proj)
+        local meta = proj.meta
 
-        if not shot.hit and not c.upgrade_pending then
-            if is_player(shot.owner_id) then
-                for id, e in pairs(c.enemies) do
-                    if e.hp > 0 then
-                        local piece = hooks.find_piece(id)
+        if not meta or meta.hit then
+            return
+        end
 
-                        if piece and piece.pos_x ~= nil then
-                            if dist(px, py, piece.pos_x, piece.pos_y) <= HIT_RADIUS then
-                                shot.hit = true
-                                damage_enemy(world, id, shot.damage)
-                                break
-                            end
+        local px = proj.px
+        local py = proj.py
+
+        if px == nil or py == nil then
+            return
+        end
+
+        if is_player(meta.owner_id) then
+            for _, id in ipairs(c.enemy_ids) do
+                local e = c.enemies[id]
+
+                if e and e.hp > 0 then
+                    local piece = hooks.find_piece(id)
+
+                    if piece
+                        and not piece._pooled
+                        and piece.pos_x ~= nil
+                    then
+                        if dist_sq(px, py, piece.pos_x, piece.pos_y) <= HIT_RADIUS_SQ then
+                            meta.hit = true
+                            damage_enemy(world, id, meta.damage)
+                            return
                         end
                     end
                 end
-            elseif c.enemies[shot.owner_id]
-                and c.enemies[shot.owner_id].attack == "ranged"
-                and player
-                and player.pos_x ~= nil
-            then
-                if dist(px, py, player.pos_x, player.pos_y) <= HIT_RADIUS then
-                    shot.hit = true
-                    damage_player(world, shot.damage)
-                end
             end
+
+            return
         end
 
-        if shot.elapsed >= shot.duration then
-            table.remove(c.shots, i)
-        else
-            i = i + 1
+        if c.enemies[meta.owner_id]
+            and c.enemies[meta.owner_id].attack == "ranged"
+            and player
+            and player.pos_x ~= nil
+        then
+            if dist_sq(px, py, player.pos_x, player.pos_y) <= HIT_RADIUS_SQ then
+                meta.hit = true
+                damage_player(world, meta.damage)
+            end
         end
-    end
+    end)
 end
 
 local function update_player_shoot(world, dt)
@@ -373,20 +425,32 @@ local function update_player_shoot(world, dt)
         return
     end
 
-    local target_id = nearest_enemy(world)
+    local targets = nearest_enemies(world, p.shot_count or 1)
 
-    if not target_id then
+    if #targets == 0 then
         return
     end
 
-    local target = hooks.find_piece(target_id)
+    local fired = 0
+    local shots = p.shot_count or 1
 
-    if not target or target.pos_x == nil then
-        return
+    for i = 1, shots do
+        if hooks.projectile_count() >= MAX_ACTIVE_SHOTS then
+            break
+        end
+
+        local target_id = targets[((i - 1) % #targets) + 1]
+        local target = hooks.find_piece(target_id)
+
+        if target and target.pos_x ~= nil then
+            shoot(world, PLAYER_ID, target.pos_x, target.pos_y, p.damage)
+            fired = fired + 1
+        end
     end
 
-    shoot(world, PLAYER_ID, target.pos_x, target.pos_y, p.damage)
-    p.shoot_cd = p.fire_rate
+    if fired > 0 then
+        p.shoot_cd = p.fire_rate
+    end
 end
 
 local function update_enemies(world, dt)
@@ -397,11 +461,13 @@ local function update_enemies(world, dt)
         return
     end
 
-    for id, e in pairs(c.enemies) do
-        if e.hp > 0 then
+    for _, id in ipairs(c.enemy_ids) do
+        local e = c.enemies[id]
+
+        if e and e.hp > 0 then
             local piece = hooks.find_piece(id)
 
-            if not piece or piece.pos_x == nil then
+            if not piece or piece._pooled or piece.pos_x == nil then
                 goto continue
             end
 
@@ -464,7 +530,7 @@ function Combat.update(world, dt, active)
         update_enemies(world, dt)
     end
 
-    update_shots(world, dt)
+    update_projectile_hits(world)
 end
 
 function Combat.keypressed(world, key)

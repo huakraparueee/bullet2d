@@ -299,6 +299,9 @@ function M.create_map(src)
         pieces_updates = nil,
         pieces_removals = nil,
         pending_ops = nil,
+        npc_paused = false,
+        structure_paused = false,
+        projectile_paused = false,
     }
 
     M.bind_grid(map, src)
@@ -460,6 +463,120 @@ function M.placement_pos(ix, iy)
     end
 
     return node.px, node.py
+end
+
+function M.placement_to_design(px, py, tile_z)
+    local map = active_map()
+    local sx, sy = Tile.placement_to_screen(map.layout, px, py, tile_z or 0)
+
+    return sx + Camera.pan_x, sy + Camera.pan_y
+end
+
+function M.clear_projectiles()
+    Projectile.clear(active_map())
+end
+
+function M.projectile_count()
+    return Projectile.count(active_map())
+end
+
+function M.each_projectile(fn)
+    Projectile.each(active_map(), fn)
+end
+
+function M.set_npc_paused(paused)
+    local map = active_map()
+
+    if map then
+        map.npc_paused = paused == true
+    end
+end
+
+function M.set_structure_paused(paused)
+    local map = active_map()
+
+    if map then
+        map.structure_paused = paused == true
+    end
+end
+
+function M.is_npc_paused()
+    local map = active_map()
+
+    return map and map.npc_paused == true
+end
+
+function M.is_structure_paused()
+    local map = active_map()
+
+    return map and map.structure_paused == true
+end
+
+function M.pause_npc()
+    M.set_npc_paused(true)
+end
+
+function M.play_npc()
+    M.set_npc_paused(false)
+end
+
+function M.pause_structure()
+    M.set_structure_paused(true)
+end
+
+function M.play_structure()
+    M.set_structure_paused(false)
+end
+
+function M.set_projectile_paused(paused)
+    local map = active_map()
+
+    if map then
+        map.projectile_paused = paused == true
+    end
+end
+
+function M.is_projectile_paused()
+    local map = active_map()
+
+    return map and map.projectile_paused == true
+end
+
+function M.pause_projectile()
+    M.set_projectile_paused(true)
+end
+
+function M.play_projectile()
+    M.set_projectile_paused(false)
+end
+
+local function terrain_cache_key(rect)
+    if not rect then
+        return nil
+    end
+
+    return rect.min_tx
+        .. ","
+        .. rect.min_ty
+        .. ","
+        .. rect.max_tx
+        .. ","
+        .. rect.max_ty
+end
+
+local function terrain_render_cache(map, cache_rect)
+    local key = terrain_cache_key(cache_rect)
+
+    if key and map._terrain_cache_key == key and map._terrain_cache then
+        return map._terrain_cache
+    end
+
+    local cache = Tile.build_render_cache(map, cache_rect)
+
+    map._terrain_cache_key = key
+    map._terrain_cache = cache
+
+    return cache
 end
 
 function M.can_step_pos(from_px, from_py, to_px, to_py)
@@ -821,7 +938,7 @@ local function pick_placement_at_world(map, layout, wx, wy)
 end
 
 local function npc_sprite_hit(map, layout, piece, wx, wy, z_at)
-    if not piece.npc or piece._removed then
+    if not Npc.is_active(piece) then
         return false
     end
 
@@ -1189,7 +1306,7 @@ function M.draw_map()
     local layout = current_map.layout
     local view_rect = tile_rect_for_viewport(layout, vp, CULL_PAD_TILES)
     local cache_rect = tile_rect_for_viewport(layout, vp, CULL_PAD_TILES + CULL_CACHE_PAD_TILES)
-    local cache = Tile.build_render_cache(current_map, cache_rect)
+    local cache = terrain_render_cache(current_map, cache_rect)
     local max_z = terrain_draw_max_z(current_map, source, cache)
 
     if source.background then
@@ -1248,7 +1365,7 @@ function M.draw_map()
         end
 
         for _, piece in ipairs(current_map.npc_pieces or {}) do
-            if piece_in_view(piece, view_rect) then
+            if Npc.is_active(piece) and piece_in_view(piece, view_rect) then
                 local sum, tx, ty = piece_sort_key(piece, source, cache)
                 local npc_base_z = Tile.top_z_from_cache(source, cache, tx, ty)
                 local npc_top_z = npc_base_z + npc_tiles_h(piece) - 1
@@ -1347,6 +1464,8 @@ end
 function M.load_map(src)
     pick_marker = nil
     current_map = M.create_map(src)
+    current_map._terrain_cache = nil
+    current_map._terrain_cache_key = nil
     M.preload_npcs(src)
 
     local min_x, min_y, max_x, max_y = map_pan_bounds(src, current_map.layout)
@@ -1387,6 +1506,10 @@ local function apply_pending_ops(map, ops)
     for _, op in ipairs(ops) do
         if op.type == "npc.add" then
             Npc.add(map, op.piece, op.ev)
+        elseif op.type == "npc.place" then
+            Npc.place(map, op.ev)
+        elseif op.type == "npc.retire" then
+            Npc.retire(map, op.id)
         elseif op.type == "structure.add" then
             Structure.init_piece(op.piece, op.ev)
 
