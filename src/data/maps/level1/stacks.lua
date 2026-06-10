@@ -1,0 +1,29 @@
+﻿return {   
+    BACKGROUND = {
+        R = 0.1,
+        G = 0.1,
+        B = 0.1,
+    },
+    STACK_CHARS = {
+        g = "grass",
+        d = "ground",
+        w = "water",
+        D = "deepwater",
+        s = "sand",
+        n = "stone",
+        i = "ice",
+    },
+    STACKS = {
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg" },   
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg", ".d" },
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg", "dd" },
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg", ".ddg", "dddg" },
+        { ".", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg", "dddg", "..dg" },
+        { ".", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg", "dddg", ".ddg" },
+        { ".", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg" },
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", "dddg" },
+        { ".ddg", ".ddg", ".ddg", ".ddg", ".ddg", ".ddg",".ddg", ".ddg", ".ddg", ".ddg" },
+        { "..dg", ".ddg", ".ddg", ".ddg", "dddg", ".ddg", "dddg", "dddg", ".ddg", "..dg" },    
+        { ".", ".", "..dg", ".ddg", "dddg", ".ddg", ".ddg", "..dg", "..d", "." },    
+    },
+}
