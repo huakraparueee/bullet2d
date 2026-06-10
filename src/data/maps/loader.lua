@@ -31,24 +31,56 @@ function M.scale_enemy(phase, def)
     }
 end
 
+local function pick_spawn_point(spawn_points, used)
+    if not spawn_points or #spawn_points == 0 then
+        return 1, 1
+    end
+
+    local free = {}
+
+    for i = 1, #spawn_points do
+        if not used[i] then
+            free[#free + 1] = i
+        end
+    end
+
+    local idx
+
+    if #free > 0 then
+        idx = free[love.math.random(1, #free)]
+    else
+        idx = love.math.random(1, #spawn_points)
+    end
+
+    used[idx] = true
+
+    local sp = spawn_points[idx]
+
+    return sp.tile_x, sp.tile_y
+end
+
 function M.phase_enemies(phase, combat)
     local out = {}
     local templates = combat.enemies or {}
+    local spawn_points = combat.spawn_points or {}
     local count = math.min(
         #templates + math.floor((phase - 1) / 2),
         MAX_ENEMIES_PER_PHASE
     )
+    local used_spawns = {}
 
     for i = 1, count do
         local tpl = templates[((i - 1) % #templates) + 1]
         local scaled = M.scale_enemy(phase, tpl)
+        local tile_x, tile_y = pick_spawn_point(spawn_points, used_spawns)
 
         out[#out + 1] = {
             id = "slime_" .. i,
             kind = tpl.kind,
             attack = tpl.attack or "melee",
-            tile_x = tpl.tile_x,
-            tile_y = tpl.tile_y,
+            projectile = tpl.projectile,
+            tile_x = tile_x,
+            tile_y = tile_y,
             facing = tpl.facing or "se",
             speed = scaled.speed,
             damage = scaled.damage,

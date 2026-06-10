@@ -14,7 +14,8 @@ local BASE = {
     damage = 12,
     fire_rate = 0.45,
     move_speed = 2,
-    xp_to_level = 40,
+    xp_to_level = 100,
+    xp_level_scale = 0.1,
 }
 
 local UPGRADES = {
@@ -82,6 +83,8 @@ local function copy_player(src)
 end
 
 local function register_enemy(c, def)
+    local attack = def.attack or "melee"
+
     c.enemies[def.id] = {
         hp = def.hp,
         max_hp = def.hp,
@@ -89,7 +92,8 @@ local function register_enemy(c, def)
         fire_rate = def.fire_rate,
         speed = def.speed,
         xp = def.xp or 10,
-        attack = def.attack or "melee",
+        attack = attack,
+        projectile = def.projectile or (attack == "ranged" and "bolt" or nil),
         attack_cd = love.math.random() * def.fire_rate,
     }
     c.enemy_ids[#c.enemy_ids + 1] = def.id
@@ -245,8 +249,8 @@ local function nearest_enemies(world, count)
     return out
 end
 
-local function shoot(world, npc_id, to_px, to_py, damage)
-    if not is_player(npc_id) or not hooks.spawn_projectile then
+local function shoot(world, npc_id, to_px, to_py, damage, projectile_kind)
+    if not hooks.spawn_projectile then
         return
     end
 
@@ -260,9 +264,16 @@ local function shoot(world, npc_id, to_px, to_py, damage)
         return
     end
 
+    local kind = projectile_kind
+
+    if is_player(npc_id) then
+        kind = "arrow"
+    end
+
     hooks.spawn_projectile(npc_id, to_px, to_py, {
         owner_id = npc_id,
         damage = damage,
+        kind = kind or "bolt",
     })
 end
 
@@ -272,7 +283,9 @@ local function try_level_up(world)
     while p.xp >= p.xp_to_next do
         p.xp = p.xp - p.xp_to_next
         p.level = p.level + 1
-        p.xp_to_next = math.floor(BASE.xp_to_level * (1 + (p.level - 1) * 0.35))
+        p.xp_to_next = math.floor(
+            BASE.xp_to_level * (1 + (p.level - 1) * BASE.xp_level_scale)
+        )
         world.combat.upgrade_pending = true
     end
 end
@@ -487,7 +500,14 @@ local function update_enemies(world, dt)
 
                 if e.attack_cd <= 0 and not c.upgrade_pending then
                     if e.attack == "ranged" then
-                        shoot(world, id, player.pos_x, player.pos_y, e.damage)
+                        shoot(
+                            world,
+                            id,
+                            player.pos_x,
+                            player.pos_y,
+                            e.damage,
+                            e.projectile
+                        )
                     else
                         damage_player(world, e.damage)
                     end

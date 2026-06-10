@@ -12,7 +12,7 @@ M.GRID_POINT_PER_TILE = 7
 M.DEBUG_DRAW_MAP = false
 M.GRID_ORIGIN_X = 0
 M.GRID_ORIGIN_Y = 0
-M.MAP_OFFSET_Y = 120
+M.MAP_OFFSET_Y = 240
 
 M.ISO_X_RATIO = 0.5
 M.ISO_Y_RATIO = 0.25
@@ -90,8 +90,8 @@ M.STRUCTURES = {
         tiles_h = 4,
         hit = { w = 120, h = 200 },
     },
-    camfire = {
-        path = "sprites/camfire.png",
+    campfire = {
+        path = "sprites/campfire.png",
         w = 32,
         h = 64,
         tiles_w = 1,
@@ -106,6 +106,36 @@ M.STRUCTURES = {
 M.NPCS = {
     slime = {
         path = "sprites/slime.png",
+        w = 64,
+        h = 64,
+        tiles_w = 1,
+        tiles_d = 1,
+        tiles_h = 1,
+        hit = { w = 40, h = 48 },
+        draw_offset_y = 0,
+        sprite_faces = "left",
+        walkspeed = 1,
+        facing = "sw",
+        modes = {
+            stand = { cols = "1", interval = 1, pause = true },
+            walk = {
+                interval = 0.25,
+                loop = true,
+                dirs = {
+                    e  = { cols = "2-5", flip = "h" },
+                    se = { cols = "2-5", flip = "h" },
+                    s  = { cols = "2-5" },
+                    sw = { cols = "2-5" },
+                    w  = { cols = "2-5" },
+                    nw = { cols = "6-9" },
+                    n  = { cols = "6-9" },
+                    ne = { cols = "6-9" },
+                },
+            },
+        }
+    },
+    slime_magic = {
+        path = "sprites/slime-magic.png",
         w = 64,
         h = 64,
         tiles_w = 1,
@@ -158,7 +188,7 @@ M.PROJECTILES = {
     bolt = {
         move = "line",
         duration = 0.55,
-        radius = 12,
+        radius = 6,
         color = { 1, 0.9, 0.25 },
     },
     arrow = {

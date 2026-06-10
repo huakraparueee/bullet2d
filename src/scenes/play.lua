@@ -254,16 +254,18 @@ function M:enter(_, opts)
                 Iso.each_projectile(fn)
             end,
             spawn_projectile = function(owner_id, to_px, to_py, meta)
-                local arrow = config.PROJECTILES.arrow
+                meta = meta or {}
+                local kind = meta.kind or "arrow"
+                local def = config.PROJECTILES[kind] or config.PROJECTILES.arrow
 
                 Iso.run({
                     type = "projectile.spawn",
-                    kind = "arrow",
+                    kind = kind,
                     from = { npc_id = owner_id },
                     to = { px = to_px, py = to_py },
-                    move = arrow.move,
-                    duration = arrow.duration,
-                    arc_height = arrow.arc_height,
+                    move = def.move,
+                    duration = def.duration,
+                    arc_height = def.arc_height,
                     meta = meta,
                 })
             end,
