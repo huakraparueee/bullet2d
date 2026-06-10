@@ -7,6 +7,7 @@ local viewport = require("src.systems.viewport")
 local Flow = require("src.systems.flow")
 local Unit = require("src.systems.unit")
 local AI = require("src.systems.ai")
+local Combat = require("src.systems.combat")
 local PlayUi = require("src.render.play")
 local CurtainUI = require("src.scenes.curtain")
 local DialogUI = require("src.scenes.dialog")
@@ -15,6 +16,8 @@ local Maps = require("src.data.maps.loader")
 
 local M = {}
 M.map = nil
+M.carry_player = nil
+M.ui_fonts = nil
 
 local default_flow_key = Maps.default()
 
@@ -76,17 +79,39 @@ function M:load_level(s)
         map_offset_y = config.MAP_OFFSET_Y,
     })
 
+    self.level_data = s
     self.map = {
         id = s.id,
         events = s.events,
         flow = s.flow,
         dialogs = s.dialogs,
+        phase = 0,
         started = false,
     }
 
-    Unit.spawn(self.map, { npc_id = "pop" })
+    Combat.reset(self.map, self.carry_player)
+    Unit.spawn(self.map, { npc_id = Combat.player_id() })
     AI.reset()
     AI.register(self.map, s.ai.wander_ids)
+end
+
+function M:start_wave(phase)
+    local map = self.map
+    local data = self.level_data
+
+    if not map or not data then
+        return
+    end
+
+    Combat.clear_enemies(map)
+
+    local enemies = Maps.phase_enemies(phase, data.combat)
+
+    Combat.start_wave(map, enemies)
+    Iso.run_many(Maps.enemy_spawn_events(enemies))
+
+    map.phase = phase
+    map.started = true
 end
 
 function M.start(flow_key)
@@ -145,6 +170,35 @@ function M:enter(_, opts)
                     type = "npc.set_mode",
                     id = id,
                     mode = mode,
+                })
+            end,
+        })
+
+        Combat.init({
+            find_piece = function(id)
+                return Iso.find_by_id(id)
+            end,
+            shoot = function(npc_id, to_px, to_py)
+                Iso.run({
+                    type = "npc.shoot",
+                    id = npc_id,
+                    kind = "arrow",
+                    move = "arc",
+                    duration = 0.4,
+                    to_px = to_px,
+                    to_py = to_py,
+                })
+            end,
+            walk_to_pos = function(id, px, py)
+                walk_npc_to(id, px, py)
+            end,
+            npc_busy = function(npc_id)
+                return Iso.is_npc_anim_busy(npc_id)
+            end,
+            remove_npc = function(id)
+                Iso.run({
+                    type = "npc.remove",
+                    id = id,
                 })
             end,
         })
@@ -214,11 +268,6 @@ function M:enter(_, opts)
             resume_scene = function()
                 gamestate.switch(M, { continue_flow = true })
             end,
-            on_switch = function()
-                M.pan_drag = false
-                M:load_level(level_data())
-                Iso.camera.reset()
-            end,
         })
 
         Flow.add("back_to_menu", function()
@@ -283,6 +332,11 @@ function M:enter(_, opts)
         Flow.add("curtain_close", function(_, done)
             CurtainUI.close_transition(done)
         end)
+
+        Flow.add("start_wave", function(block, done)
+            M:start_wave(block.phase or 1)
+            done()
+        end)
     end
 
     if opts.continue_flow then
@@ -293,11 +347,40 @@ function M:enter(_, opts)
 
     if opts.boot then
         self.pan_drag = false
+        self.ui_fonts = PlayUi.create_fonts()
         Iso.camera.reset()
         Flow.boot(opts.flow_key or default_flow_key)
-        self:load_level(level_data())
+        self:load_level(level_data(opts.flow_key or default_flow_key))
         Flow.queue_flush()
         Flow.flush()
+    end
+end
+
+local function sync_input(map)
+    local blocked = Combat.is_upgrade_pending(map) or Combat.is_dead(map)
+
+    Unit.set_input_enabled(map, not blocked)
+end
+
+local function advance_phase(map)
+    M.carry_player = Combat.player_stats(map)
+    M:start_wave(map.phase + 1)
+end
+
+local function tick_combat(map, dt)
+    if not map.started then
+        return
+    end
+
+    if Combat.is_dead(map) then
+        return
+    end
+
+    Combat.apply_player_speed(map)
+    Combat.update(map, dt, true)
+
+    if Combat.enemy_count(map) == 0 and not Combat.is_upgrade_pending(map) then
+        advance_phase(map)
     end
 end
 
@@ -312,8 +395,10 @@ function M:update(dt)
     end
 
     Iso.tick(dt)
+    sync_input(map)
     Unit.update(map, dt)
     AI.update(map, dt)
+    tick_combat(map, dt)
 
     Flow.tick_map_wait(map, false)
 end
@@ -329,33 +414,27 @@ function M:keypressed(key, _, isrepeat)
         return
     end
 
+    if Combat.keypressed(map, key) then
+        return
+    end
+
     if Unit.keypressed(map, key) then
         return
     end
 
-    local move_delta = {
-        left = -1,
-        up = -1,
-        right = 1,
-        down = 1,
-    }
-
-    if move_delta[key] then
-        if map.started
-            and not map.finished
-            and Flow.can_use_actions()
-        then
-
+    if key == "r" then
+        if Combat.is_dead(map) then
+            M.carry_player = Combat.player_stats(map)
+            Combat.reset(map, M.carry_player)
+            Unit.spawn(map, { npc_id = Combat.player_id() })
+            M:start_wave(map.phase)
+        else
+            gamestate.switch(M, {
+                boot = true,
+                flow_key = Flow.flow_key() or default_flow_key,
+            })
         end
 
-        return
-    end
-
-    if key == "r" then
-        gamestate.switch(M, {
-            boot = true,
-            flow_key = self.flow_key or default_flow_key,
-        })
         return
     end
 end
@@ -400,8 +479,22 @@ function M:draw()
 
     Iso.draw_map()
 
-    if self.map then
-
+    if self.map and self.map.combat then
+        PlayUi.draw_hud({
+            fonts = self.ui_fonts,
+            combat = self.map.combat,
+            phase = self.map.phase,
+            enemy_count = Combat.enemy_count(self.map),
+        })
+        PlayUi.draw_upgrade({
+            fonts = self.ui_fonts,
+            upgrade_pending = Combat.is_upgrade_pending(self.map),
+            upgrade_options = Combat.upgrade_options(),
+        })
+        PlayUi.draw_game_over({
+            fonts = self.ui_fonts,
+            dead = Combat.is_dead(self.map),
+        })
     end
 
     CurtainUI.draw()

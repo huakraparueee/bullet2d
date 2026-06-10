@@ -9,7 +9,9 @@ local MENU_ITEMS = {
     {
         label = "Play",
         action = function()
-            require("src.scenes.play").start()
+            local play = require("src.scenes.play")
+            play.carry_player = nil
+            play.start()
         end,
     },
     {

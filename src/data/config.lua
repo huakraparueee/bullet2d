@@ -111,6 +111,7 @@ M.NPCS = {
         tiles_w = 1,
         tiles_d = 1,
         tiles_h = 1,
+        hit = { w = 40, h = 48 },
         draw_offset_y = 0,
         sprite_faces = "left",
         walkspeed = 1,
@@ -143,7 +144,7 @@ M.NPCS = {
         hit = { w = 36, h = 72 },
         draw_offset_y = 0,
         sprite_faces = "right",
-        walkspeed = 2,
+        walkspeed = 4,
         facing = "s",
         modes = {
             stand = { cols = "1-2", interval = 0.8, loop = true },
