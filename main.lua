@@ -13,7 +13,20 @@
     - conf.lua
 ]]
 
-package.path = package.path .. ";libraries/isolet2d/?.lua"
+local ISOLET_DIR = "libraries/isolet2d/"
+
+local function isolet_loader(name)
+    local path = ISOLET_DIR .. name .. ".lua"
+    if love.filesystem.getInfo(path) then
+        local chunk, err = load(love.filesystem.read(path), "@" .. path)
+        if not chunk then
+            error(err)
+        end
+        return chunk
+    end
+end
+
+table.insert(package.loaders, 2, isolet_loader)
 
 local config = require("src.data.config")
 local gamestate = require("libraries.hump.gamestate")
