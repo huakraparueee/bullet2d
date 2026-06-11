@@ -2,31 +2,50 @@ local config = require("src.data.config")
 local gamestate = require("libraries.hump.gamestate")
 local viewport = require("src.systems.viewport")
 local MenuUi = require("src.render.menu")
+local Audio = require("src.systems.audio")
 
 local M = {}
 
-local MENU_ITEMS = {
-    {
+local function build_menu_items()
+    local play = require("src.scenes.play")
+    local items = {}
+
+    if play.has_saved_run() then
+        items[#items + 1] = {
+            label = "Continue",
+            action = function()
+                gamestate.switch(play, { resume = play.saved_run })
+            end,
+        }
+    end
+
+    items[#items + 1] = {
         label = "Play",
         action = function()
-            local play = require("src.scenes.play")
+            play.saved_run = nil
             play.carry_player = nil
+            play.death_count = 0
             play.start()
         end,
-    },
-    {
+    }
+
+    items[#items + 1] = {
         label = "Quit",
         action = function()
             love.event.quit()
         end,
-    },
-}
+    }
+
+    return items
+end
 
 function M:init()
     self.default_font = love.graphics.newFont()
 end
 
 function M:enter()
+    Audio.stop_music()
+    self.menu_items = build_menu_items()
     self.selected_index = 1
     self.fonts = MenuUi.create_fonts(
         config.DESIGN_WIDTH,
@@ -46,30 +65,35 @@ function M:keypressed(key, _, isrepeat)
         return
     end
 
+    local items = self.menu_items or {}
+
     if key == "up" or key == "w" then
         self.selected_index = self.selected_index - 1
 
         if self.selected_index < 1 then
-            self.selected_index = #MENU_ITEMS
+            self.selected_index = #items
         end
 
+        Audio.play("choose")
         return
     end
 
     if key == "down" or key == "s" then
         self.selected_index = self.selected_index + 1
 
-        if self.selected_index > #MENU_ITEMS then
+        if self.selected_index > #items then
             self.selected_index = 1
         end
 
+        Audio.play("choose")
         return
     end
 
     if key == "return" or key == "space" or key == "kpenter" then
-        local item = MENU_ITEMS[self.selected_index]
+        local item = items[self.selected_index]
 
         if item then
+            Audio.play("choose")
             item.action()
         end
     end
@@ -86,7 +110,7 @@ function M:draw()
 
     MenuUi.draw({
         title = "Bullet 2D",
-        items = MENU_ITEMS,
+        items = self.menu_items,
         selected_index = self.selected_index,
         fonts = self.fonts,
     })

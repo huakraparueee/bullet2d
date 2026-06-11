@@ -1,28 +1,26 @@
-
 return {
     intro = {
-        image = "sprites/tree.png",
+        image = "images/orc.png",
         lines = {
             {
-                speaker = "Guide",
-                text = "Welcome to the island.",
+                speaker = "Orc",
+                text = "Halt right there, you slimy blob! Do not take another step into my domain.",
             },
             {
-                speaker = "Guide",
-                text = "Watch how each choice reshapes the world.",
-            },
-        },
-    },
-    outro = {
-        image = "sprites/tree.png",
-        lines = {
-            {
-                speaker = "Guide",
-                text = "The island has settled into its new shape.",
+                speaker = "Orc",
+                text = "Look at you... just a soft, mindless Slime thinking you can wander freely on this island.",
             },
             {
-                speaker = "Guide",
-                text = "Every choice leaves a trace — yours is complete.",
+                speaker = "Orc",
+                text = "This world is small, and every path you take will leave a mark.",
+            },
+            {
+                speaker = "Orc",
+                text = "Yield to my rule, or challenge it. Let us see how your choices will reshape this place.",
+            },
+            {
+                speaker = "Orc",
+                text = "Do not regret your decisions later... Welcome to the island!",
             },
         },
     },

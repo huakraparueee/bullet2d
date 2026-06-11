@@ -1,5 +1,5 @@
 local config = require("src.data.config")
-
+local inspect = require("libraries.inspect")
 local M = {}
 
 local function clamp(v, lo, hi)
@@ -10,7 +10,8 @@ function M.create_fonts()
     local shorter = math.min(config.DESIGN_WIDTH, config.DESIGN_HEIGHT)
 
     return {
-        hud = love.graphics.newFont(clamp(math.floor(shorter * 0.028), 14, 28)),
+        hp = love.graphics.newFont(clamp(math.floor(shorter * 0.01), 14, 28)),
+        hud = love.graphics.newFont(clamp(math.floor(shorter * 0.025), 14, 28)),
         title = love.graphics.newFont(clamp(math.floor(shorter * 0.04), 18, 40)),
     }
 end
@@ -30,14 +31,14 @@ function M.draw_hud(view)
     end
 
     local lg = love.graphics
-    local fonts = view.fonts or M.create_fonts()
+    local fonts = M.create_fonts()
     local c = view.combat
     local p = c.player
     local margin = 24
     local bar_w = 280
     local bar_h = 22
 
-    lg.setFont(fonts.hud)
+    lg.setFont(fonts.hp)
 
     draw_bar(lg, margin, margin, bar_w, bar_h, p.hp / p.max_hp, 0.85, 0.25, 0.3)
     lg.setColor(1, 1, 1, 0.95)
@@ -69,10 +70,11 @@ function M.draw_hud(view)
     lg.setColor(0.92, 0.92, 0.96, 0.9)
     lg.print(
         string.format(
-            "Phase %d  Enemies: %d  Shots: %d",
+            "Phase %d  Enemies: %d  Shots: %d  Deaths: %d",
             view.phase or 1,
             view.enemy_count or 0,
-            p.shot_count or 1
+            p.shot_count or 1,
+            view.death_count or 0
         ),
         margin,
         xp_y + bar_h + 8
@@ -89,7 +91,7 @@ function M.draw_upgrade(view)
     local lg = love.graphics
     local w = config.DESIGN_WIDTH
     local h = config.DESIGN_HEIGHT
-    local fonts = view.fonts or M.create_fonts()
+    local fonts = M.create_fonts()
 
     lg.setColor(0, 0, 0, 0.65)
     lg.rectangle("fill", 0, 0, w, h)
@@ -126,7 +128,7 @@ function M.draw_game_over(view)
     local lg = love.graphics
     local w = config.DESIGN_WIDTH
     local h = config.DESIGN_HEIGHT
-    local fonts = view.fonts or M.create_fonts()
+    local fonts = M.create_fonts()
 
     lg.setColor(0, 0, 0, 0.7)
     lg.rectangle("fill", 0, 0, w, h)
@@ -142,11 +144,18 @@ function M.draw_game_over(view)
 
     lg.setFont(fonts.hud)
     lg.setColor(0.9, 0.9, 0.95, 1)
+    local deaths = string.format("Deaths: %d", view.death_count or 0)
+    lg.print(
+        deaths,
+        math.floor(w * 0.5 - fonts.hud:getWidth(deaths) * 0.5),
+        h * 0.46
+    )
+
     local hint = "Press R to retry"
     lg.print(
         hint,
         math.floor(w * 0.5 - fonts.hud:getWidth(hint) * 0.5),
-        h * 0.48
+        h * 0.52
     )
 
     lg.setColor(1, 1, 1, 1)

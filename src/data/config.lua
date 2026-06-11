@@ -24,28 +24,28 @@ M.TERRAIN_MATS = {
         autotile = true,
         proximity = 3,
         variants = {
-            s      = "sprites/terrain/grass-1.png",  -- ล่าง
-            e_s    = "sprites/terrain/grass-2.png",  -- ขวา+ล่าง
-            w_e_s  = "sprites/terrain/grass-3.png",  -- ซ้าย+ขวา+ล่าง
-            w_s    = "sprites/terrain/grass-4.png",  -- ซ้าย+ล่าง
-            n_s    = "sprites/terrain/grass-5.png",  -- บน+ล่าง
-            n_e_s  = "sprites/terrain/grass-6.png",  -- บน+ขวา+ล่าง
+            s      = "sprites/terrain/grass-1.png",  
+            e_s    = "sprites/terrain/grass-2.png",  
+            w_e_s  = "sprites/terrain/grass-3.png",  
+            w_s    = "sprites/terrain/grass-4.png",  
+            n_s    = "sprites/terrain/grass-5.png",  
+            n_e_s  = "sprites/terrain/grass-6.png",  
             full   = {
                 { path = "sprites/terrain/grass-7a.png", weight = 1 },
                 { path = "sprites/terrain/grass-7b.png", weight = 5 },
                 { path = "sprites/terrain/grass-7c.png", weight = 3 },
                 { path = "sprites/terrain/grass-7d.png", weight = 2 },
                 { path = "sprites/terrain/grass-7e.png", weight = 1 },
-            },  -- บน+ขวา+ล่าง+ซ้าย
-            n_w_s  = "sprites/terrain/grass-8.png",  -- บน+ซ้าย+ล่าง
-            n      = "sprites/terrain/grass-9.png",  -- บน
-            n_e    = "sprites/terrain/grass-10.png", -- บน+ขวา
-            w_n_e  = "sprites/terrain/grass-11.png", -- ซ้าย+บน+ขวา
-            n_w    = "sprites/terrain/grass-12.png", -- บน+ซ้าย
-            solo   = "sprites/terrain/grass-13.png", -- ไม่ชิดขอบ
-            e      = "sprites/terrain/grass-14.png", -- ขวา
-            w_e    = "sprites/terrain/grass-15.png", -- ซ้าย+ขวา
-            w      = "sprites/terrain/grass-16.png", -- ซ้าย
+            }, 
+            n_w_s  = "sprites/terrain/grass-8.png", 
+            n      = "sprites/terrain/grass-9.png", 
+            n_e    = "sprites/terrain/grass-10.png",
+            w_n_e  = "sprites/terrain/grass-11.png", 
+            n_w    = "sprites/terrain/grass-12.png", 
+            solo   = "sprites/terrain/grass-13.png", 
+            e      = "sprites/terrain/grass-14.png", 
+            w_e    = "sprites/terrain/grass-15.png", 
+            w      = "sprites/terrain/grass-16.png", 
         },
     },
     ground = {
@@ -88,7 +88,7 @@ M.STRUCTURES = {
         tiles_w = 1,
         tiles_d = 1,
         tiles_h = 4,
-        hit = { w = 120, h = 200 },
+        hit = { w = 140, h = 200 },
     },
     campfire = {
         path = "sprites/campfire.png",
@@ -199,6 +199,29 @@ M.PROJECTILES = {
         duration = 0.5,
         arc_height = 56,
         draw_offset_y = -40,
+    },
+}
+
+M.SOUNDS = {
+    fire = {
+        path = "sounds/fire.mp3",
+        volume = 0.32,
+        min_interval = 0.09,
+        max_instances = 4,
+    },
+    choose = {
+        path = "sounds/choose.mp3",
+        volume = 0.7,
+    },
+    gameover = {
+        path = "sounds/gameover.mp3",
+        volume = 0.9,
+    },
+    background = {
+        path = "sounds/background.mp3",
+        volume = 0.35,
+        stream = true,
+        music = true,
     },
 }
 

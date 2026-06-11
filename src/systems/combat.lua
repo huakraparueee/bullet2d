@@ -93,6 +93,8 @@ local function register_enemy(c, def)
         speed = def.speed,
         xp = def.xp or 10,
         attack = attack,
+        kind = def.kind,
+        facing = def.facing or "se",
         projectile = def.projectile or (attack == "ranged" and "bolt" or nil),
         attack_cd = love.math.random() * def.fire_rate,
     }
@@ -287,6 +289,7 @@ local function try_level_up(world)
             BASE.xp_to_level * (1 + (p.level - 1) * BASE.xp_level_scale)
         )
         world.combat.upgrade_pending = true
+        world.combat.dead = false
     end
 end
 
@@ -320,6 +323,7 @@ function Combat.apply_upgrade(world, index)
 
     p.hp = p.max_hp
     c.upgrade_pending = false
+    try_level_up(world)
 
     return true
 end
@@ -570,6 +574,86 @@ end
 
 function Combat.player_id()
     return player_id()
+end
+
+local function copy_player_state(p)
+    local out = {}
+
+    for k, v in pairs(p or {}) do
+        out[k] = v
+    end
+
+    return out
+end
+
+local function copy_enemy_state(e)
+    if not e then
+        return nil
+    end
+
+    return {
+        hp = e.hp,
+        max_hp = e.max_hp,
+        damage = e.damage,
+        fire_rate = e.fire_rate,
+        speed = e.speed,
+        xp = e.xp,
+        attack = e.attack,
+        kind = e.kind,
+        facing = e.facing,
+        projectile = e.projectile,
+        attack_cd = e.attack_cd,
+        chase_px = e.chase_px,
+        chase_py = e.chase_py,
+    }
+end
+
+function Combat.snapshot(world)
+    local c = world and world.combat
+
+    if not c then
+        return nil
+    end
+
+    local enemies = {}
+    local enemy_ids = {}
+
+    for _, id in ipairs(c.enemy_ids) do
+        enemy_ids[#enemy_ids + 1] = id
+        enemies[id] = copy_enemy_state(c.enemies[id])
+    end
+
+    return {
+        player = copy_player_state(c.player),
+        enemies = enemies,
+        enemy_ids = enemy_ids,
+        upgrade_pending = c.upgrade_pending,
+        dead = c.dead,
+    }
+end
+
+function Combat.restore(world, data)
+    if not world or not data then
+        return
+    end
+
+    local enemies = {}
+    local enemy_ids = {}
+
+    for _, id in ipairs(data.enemy_ids or {}) do
+        enemy_ids[#enemy_ids + 1] = id
+        enemies[id] = copy_enemy_state(data.enemies[id])
+    end
+
+    world.combat = {
+        player = copy_player_state(data.player),
+        enemies = enemies,
+        enemy_ids = enemy_ids,
+        upgrade_pending = data.upgrade_pending == true,
+        dead = data.dead == true,
+    }
+
+    Combat.apply_player_speed(world)
 end
 
 return Combat

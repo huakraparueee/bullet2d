@@ -18,6 +18,7 @@ package.path = package.path .. ";libraries/isolet2d/?.lua"
 local config = require("src.data.config")
 local gamestate = require("libraries.hump.gamestate")
 local viewport = require("src.systems.viewport")
+local Audio = require("src.systems.audio")
 
 local DEV = false
 local lurker
@@ -84,9 +85,16 @@ end
 
 local function hot_reload()
     local w, h = love.graphics.getDimensions()
+
+    if Audio.stop_all then
+        Audio.stop_all()
+    end
+
     clear_modules()
     viewport = require("src.systems.viewport")
     config = require("src.data.config")
+    Audio = require("src.systems.audio")
+    Audio.preload(config.SOUNDS)
     viewport.resize(w, h, config.DESIGN_WIDTH, config.DESIGN_HEIGHT)
     require("src.render.dialog").clear_cache()
     boot()
@@ -111,6 +119,7 @@ function love.load()
     viewport.resize(win_w, win_h, config.DESIGN_WIDTH, config.DESIGN_HEIGHT)
 
     setup_devtools()
+    Audio.preload(config.SOUNDS)
     boot()
 
     if lurker then
