@@ -6,7 +6,7 @@ local Audio = require("src.systems.audio")
 
 local M = {}
 
-local function build_menu_items()
+local function build_menu_items(menu)
     local play = require("src.scenes.play")
     local items = {}
 
@@ -30,6 +30,13 @@ local function build_menu_items()
     }
 
     items[#items + 1] = {
+        label = "Credits",
+        action = function()
+            menu.show_credits = true
+        end,
+    }
+
+    items[#items + 1] = {
         label = "Quit",
         action = function()
             love.event.quit()
@@ -45,7 +52,8 @@ end
 
 function M:enter()
     Audio.stop_music()
-    self.menu_items = build_menu_items()
+    self.show_credits = false
+    self.menu_items = build_menu_items(self)
     self.selected_index = 1
     self.fonts = MenuUi.create_fonts(
         config.DESIGN_WIDTH,
@@ -62,6 +70,15 @@ end
 
 function M:keypressed(key, _, isrepeat)
     if isrepeat then
+        return
+    end
+
+    if self.show_credits then
+        if key == "escape" or key == "return" or key == "space" or key == "kpenter" then
+            self.show_credits = false
+            Audio.play("choose")
+        end
+
         return
     end
 
@@ -108,12 +125,22 @@ function M:draw()
 
     viewport.begin()
 
-    MenuUi.draw({
-        title = "Bullet 2D",
-        items = self.menu_items,
-        selected_index = self.selected_index,
-        fonts = self.fonts,
-    })
+    if self.show_credits then
+        MenuUi.draw_credits({
+            fonts = self.fonts,
+            lines = {
+                "Created by HkpsS",
+                "Thank you for playing!",
+            },
+        })
+    else
+        MenuUi.draw({
+            title = "Bullet 2D",
+            items = self.menu_items,
+            selected_index = self.selected_index,
+            fonts = self.fonts,
+        })
+    end
 
     love.graphics.setFont(self.default_font)
     love.graphics.setColor(1, 1, 1, 1)

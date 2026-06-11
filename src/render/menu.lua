@@ -81,4 +81,51 @@ function M.draw(view)
     lg.setColor(1, 1, 1, 1)
 end
 
+function M.draw_credits(view)
+    if not view or not view.fonts then
+        return
+    end
+
+    local lg = love.graphics
+    local w = config.DESIGN_WIDTH
+    local h = config.DESIGN_HEIGHT
+    local title_font = view.fonts.title
+    local body_font = view.fonts.body
+    local center_x = w * 0.5
+    local title = "Credits"
+    local lines = view.lines or {}
+
+    lg.setFont(title_font)
+    lg.setColor(0.92, 0.92, 0.96, 1)
+    lg.print(
+        title,
+        math.floor(center_x - title_font:getWidth(title) * 0.5),
+        h * 0.32
+    )
+
+    lg.setFont(body_font)
+    local start_y = h * 0.32 + title_font:getHeight() * 2
+    local spacing = body_font:getHeight() + 12
+
+    for i, line in ipairs(lines) do
+        lg.setColor(0.9, 0.9, 0.95, 1)
+        lg.print(
+            line,
+            math.floor(center_x - body_font:getWidth(line) * 0.5),
+            start_y + (i - 1) * spacing
+        )
+    end
+
+    local hint = view.hint or "Enter / Esc"
+
+    lg.setColor(0.5, 0.5, 0.55, 1)
+    lg.print(
+        hint,
+        math.floor(center_x - body_font:getWidth(hint) * 0.5),
+        h - body_font:getHeight() - 24
+    )
+
+    lg.setColor(1, 1, 1, 1)
+end
+
 return M

@@ -40,11 +40,17 @@ function M.draw_hud(view)
 
     lg.setFont(fonts.hp)
 
-    draw_bar(lg, margin, margin, bar_w, bar_h, p.hp / p.max_hp, 0.85, 0.25, 0.3)
+    local level_label = string.format("Lv %d", p.level or 1)
+    lg.setColor(1, 0.92, 0.45, 1)
+    lg.print(level_label, margin, margin + 3)
+
+    local bar_x = margin + fonts.hp:getWidth(level_label) + 12
+
+    draw_bar(lg, bar_x, margin, bar_w, bar_h, p.hp / p.max_hp, 0.85, 0.25, 0.3)
     lg.setColor(1, 1, 1, 0.95)
     lg.print(
         string.format("HP %d / %d", math.ceil(p.hp), math.ceil(p.max_hp)),
-        margin + 8,
+        bar_x + 8,
         margin + 3
     )
 
@@ -52,7 +58,7 @@ function M.draw_hud(view)
 
     draw_bar(
         lg,
-        margin,
+        bar_x,
         xp_y,
         bar_w,
         bar_h - 4,
@@ -62,8 +68,8 @@ function M.draw_hud(view)
         0.95
     )
     lg.print(
-        string.format("Lv %d  XP %d / %d", p.level, p.xp, p.xp_to_next),
-        margin + 8,
+        string.format("XP %d / %d", p.xp, p.xp_to_next),
+        bar_x + 8,
         xp_y + 2
     )
 

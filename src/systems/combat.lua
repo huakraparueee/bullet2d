@@ -15,7 +15,7 @@ local BASE = {
     fire_rate = 0.45,
     move_speed = 2,
     xp_to_level = 100,
-    xp_level_scale = 0.1,
+    xp_level_scale = 0.2,
 }
 
 local UPGRADES = {
@@ -30,6 +30,8 @@ local MELEE_RANGE = 1.0
 local SHOOT_RANGE = 7
 local CHASE_RANGE = 12
 local CHASE_REPATH = 1.5
+local CHASE_REPATH_INTERRUPT = 4.5
+local CHASE_COOLDOWN = 0.4
 local HIT_INVULN = 0.55
 local MAX_ACTIVE_SHOTS = 100
 local HIT_RADIUS_SQ = HIT_RADIUS * HIT_RADIUS
@@ -59,6 +61,12 @@ local function shot_count_for_phase(phase)
     phase = phase or 1
 
     return 1 + math.floor(phase / PHASES_PER_SHOT)
+end
+
+local function chase_stagger(id)
+    local n = tonumber(string.match(id or "", "%d+")) or 0
+
+    return (n % 8) * 0.06
 end
 
 local function copy_player(src)
@@ -97,6 +105,7 @@ local function register_enemy(c, def)
         facing = def.facing or "se",
         projectile = def.projectile or (attack == "ranged" and "bolt" or nil),
         attack_cd = love.math.random() * def.fire_rate,
+        chase_cd = chase_stagger(def.id),
     }
     c.enemy_ids[#c.enemy_ids + 1] = def.id
 end
@@ -490,17 +499,19 @@ local function update_enemies(world, dt)
 
             local d = dist(player.pos_x, player.pos_y, piece.pos_x, piece.pos_y)
 
-            if piece.npc then
+            if piece.npc and piece.npc.walkspeed ~= e.speed then
                 piece.npc.walkspeed = e.speed
             end
 
             e.attack_cd = math.max(0, e.attack_cd - dt)
+            e.chase_cd = math.max(0, (e.chase_cd or chase_stagger(id)) - dt)
 
             local strike_range = e.attack == "ranged" and SHOOT_RANGE or MELEE_RANGE
 
             if d <= strike_range then
                 e.chase_px = nil
                 e.chase_py = nil
+                e.chase_cd = 0
 
                 if e.attack_cd <= 0 and not c.upgrade_pending then
                     if e.attack == "ranged" then
@@ -519,20 +530,33 @@ local function update_enemies(world, dt)
                     e.attack_cd = e.fire_rate
                 end
             elseif d <= CHASE_RANGE then
-                if not hooks.npc_busy(id) then
-                    local repath = not e.chase_px
-                        or dist(e.chase_px, e.chase_py, player.pos_x, player.pos_y)
-                            >= CHASE_REPATH
+                if e.chase_cd <= 0 and not hooks.npc_busy(id) then
+                    local walking = piece.npc and piece.npc.path ~= nil
+                    local px, py = player.pos_x, player.pos_y
+                    local repath = false
 
-                    if repath then
-                        hooks.walk_to_pos(id, player.pos_x, player.pos_y)
-                        e.chase_px = player.pos_x
-                        e.chase_py = player.pos_y
+                    if walking then
+                        local path = piece.npc.path
+                        local goal = path and path[#path]
+
+                        if goal then
+                            repath = dist(goal.x, goal.y, px, py) >= CHASE_REPATH_INTERRUPT
+                        end
+                    else
+                        repath = not e.chase_px
+                            or dist(e.chase_px, e.chase_py, px, py) >= CHASE_REPATH
+                    end
+
+                    if repath and hooks.walk_to_pos(id, px, py) then
+                        e.chase_px = px
+                        e.chase_py = py
+                        e.chase_cd = CHASE_COOLDOWN + chase_stagger(id)
                     end
                 end
             else
                 e.chase_px = nil
                 e.chase_py = nil
+                e.chase_cd = 0
             end
 
             ::continue::
@@ -605,6 +629,7 @@ local function copy_enemy_state(e)
         attack_cd = e.attack_cd,
         chase_px = e.chase_px,
         chase_py = e.chase_py,
+        chase_cd = e.chase_cd,
     }
 end
 

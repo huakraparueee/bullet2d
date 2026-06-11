@@ -32,7 +32,7 @@ local wired = false
 
 local WAVE_CLEAR_DELAY = 0.75
 local SPAWN_INTERVAL = 0.08
-local RETIRE_BATCH = 10
+local RETIRE_BATCH = 8
 
 local function walk_npc_to(id, px, py)
     if not px or Iso.is_npc_anim_busy(id) then
@@ -412,6 +412,7 @@ local function tick_wave(self, dt)
             self.retire_ids = nil
             self.retire_i = 1
             map.wave_state = "spawning"
+            map.started = true
             self.spawn_timer = 0
         end
 
@@ -426,23 +427,16 @@ local function tick_wave(self, dt)
 
     if not queue or self.spawn_i > #queue then
         map.wave_state = "playing"
-        map.started = true
         self.spawn_queue = nil
         return
     end
 
     self.spawn_timer = self.spawn_timer - dt
 
-    local batch = {}
-
-    while self.spawn_timer <= 0 and self.spawn_i <= #queue do
-        batch[#batch + 1] = queue[self.spawn_i]
+    if self.spawn_timer <= 0 and self.spawn_i <= #queue then
+        Iso.run(queue[self.spawn_i])
         self.spawn_i = self.spawn_i + 1
         self.spawn_timer = SPAWN_INTERVAL
-    end
-
-    if #batch > 0 then
-        Iso.run_many(batch)
     end
 end
 
@@ -537,7 +531,7 @@ function M:enter(_, opts)
                 })
             end,
             walk_to_pos = function(id, px, py)
-                walk_npc_to(id, px, py)
+                return walk_npc_to(id, px, py)
             end,
             npc_busy = function(npc_id)
                 return Iso.is_npc_anim_busy(npc_id)
@@ -749,8 +743,16 @@ local function tick_gameover(self, map)
     end
 end
 
+local function combat_wave_active(map)
+    if not map or not map.started then
+        return false
+    end
+
+    return map.wave_state == "playing" or map.wave_state == "spawning"
+end
+
 local function tick_combat(map, dt)
-    if map.wave_state ~= "playing" or not map.started then
+    if not combat_wave_active(map) then
         return
     end
 
